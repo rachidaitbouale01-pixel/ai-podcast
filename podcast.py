@@ -1,40 +1,98 @@
 """
-Free AI podcast on autopilot.
-Topic (Google Sheet) -> Gemini script -> edge-tts audio -> cover -> RSS on GitHub Pages.
-Spotify & Apple Podcasts read the RSS feed automatically.
+Logistics Tomorrow - AI podcast on autopilot (v2, free).
+Sheet topic + your notes -> Gemini script -> human-like voices (Gemini TTS, fallback edge-tts)
+-> branded cover (AI art or your template + real title text) -> RSS on GitHub Pages
+-> Spotify & Apple Podcasts read the RSS automatically.
 """
-import asyncio, csv, io, json, os, re, subprocess, sys, time
+import asyncio, base64, csv, io, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from xml.sax.saxutils import escape
 
-import edge_tts
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-# ---------- SETTINGS (set as GitHub Secrets / Variables) ----------
+# ------------------------------------------------------------------ settings
+E = os.environ.get
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-SHEET_CSV_URL  = os.environ["SHEET_CSV_URL"]           # Google Sheet published as CSV
-BASE_URL       = os.environ["BASE_URL"].rstrip("/")    # e.g. https://username.github.io/ai-podcast
-LANG           = os.environ.get("PODCAST_LANG", "en")  # en | fr | ar
-TITLE          = os.environ.get("PODCAST_TITLE", "My AI Podcast")
-AUTHOR         = os.environ.get("PODCAST_AUTHOR", "Rachid")
-EMAIL          = os.environ.get("PODCAST_EMAIL", "you@example.com")
-DESCRIPTION    = os.environ.get("PODCAST_DESCRIPTION", "An AI-generated podcast. Episodes are researched, written and voiced with AI.")
-CATEGORY       = os.environ.get("PODCAST_CATEGORY", "Technology")
-MODEL          = os.environ.get("GEMINI_MODEL") or "gemini-flash-latest"
+SHEET_CSV_URL  = os.environ["SHEET_CSV_URL"]
+BASE_URL       = os.environ["BASE_URL"].rstrip("/")
+LANG           = E("PODCAST_LANG") or "en"
+TITLE          = E("PODCAST_TITLE") or "Logistics Tomorrow"
+AUTHOR         = E("PODCAST_AUTHOR") or "Rachid Ait Bouale"
+EMAIL          = E("PODCAST_EMAIL") or "you@example.com"
+DESCRIPTION    = E("PODCAST_DESCRIPTION") or "AI-produced episodes on supply chain, SAP and smart logistics."
+CATEGORY       = E("PODCAST_CATEGORY") or "Business"
+MODEL          = E("GEMINI_MODEL") or "gemini-flash-latest"
+TTS_MODEL      = E("GEMINI_TTS_MODEL") or ""          # empty = auto-detect
+HOST_A         = E("HOST_A") or "Alex"                # curious host
+HOST_B         = E("HOST_B") or "Sara"                # expert host
+VOICE_A        = E("GEMINI_VOICE_A") or "Puck"        # upbeat male
+VOICE_B        = E("GEMINI_VOICE_B") or "Kore"        # firm female
+CREATOR_BIO    = E("CREATOR_BIO") or ("Rachid Ait Bouale, SAP S/4HANA consultant (Production Planning, "
+                                       "Maintenance, Quality) and PhD researcher in supply chain")
+CTA            = E("PODCAST_CTA") or "Subscribe to the Logistics Tomorrow newsletter for the full breakdown."
+MINUTES        = int(E("EPISODE_MINUTES") or "12")
+USE_AI_COVER   = (E("USE_AI_COVER") or "yes").lower() in ("yes", "true", "1", "oui")
+COVER_STYLE    = E("COVER_STYLE") or ("cinematic isometric digital illustration, smart port and global supply "
+                  "chain, containers, cranes, glowing data network lines, deep navy and teal palette with "
+                  "orange accents, dusk lighting, highly detailed")
+ACCENT         = E("BRAND_COLOR") or "#FF7A45"
 
-VOICES = {
-    "en": ("en-US-AriaNeural", "en-US-GuyNeural"),
-    "fr": ("fr-FR-DeniseNeural", "fr-FR-HenriNeural"),
-    "ar": ("ar-MA-MounaNeural", "ar-MA-JamalNeural"),
+EDGE_VOICES = {
+    "en": ("en-US-AndrewMultilingualNeural", "en-US-AvaMultilingualNeural"),
+    "fr": ("fr-FR-RemyMultilingualNeural", "fr-FR-VivienneMultilingualNeural"),
+    "ar": ("ar-MA-JamalNeural", "ar-MA-MounaNeural"),
 }
 LANG_NAME = {"en": "English", "fr": "French", "ar": "Arabic"}
+API = "https://generativelanguage.googleapis.com/v1beta"
+HDR = {"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"}
+DB, EP_DIR, BRAND = "episodes.json", "episodes", "brand"
 
-DB = "episodes.json"
-EP_DIR = "episodes"
+
+# ------------------------------------------------------------------ helpers
+def gemini_post(model, body, tries=5, timeout=300):
+    """POST with retries on busy/limit errors. Returns response (may be not ok)."""
+    r = None
+    for attempt in range(tries):
+        r = requests.post(f"{API}/models/{model}:generateContent", headers=HDR, json=body, timeout=timeout)
+        if r.status_code in (429, 500, 502, 503, 504):
+            wait = 20 * (attempt + 1)
+            print(f"  {model} busy ({r.status_code}), retry in {wait}s")
+            time.sleep(wait)
+            continue
+        break
+    return r
 
 
+def list_models():
+    try:
+        r = requests.get(f"{API}/models?pageSize=1000", headers=HDR, timeout=30)
+        r.raise_for_status()
+        return [m["name"].split("/", 1)[1] for m in r.json().get("models", [])]
+    except Exception as exc:
+        print(f"  could not list models: {exc}")
+        return []
+
+
+def pick(models, must, prefer=("flash",), avoid=()):
+    c = [m for m in models if all(k in m for k in must) and not any(a in m for a in avoid)]
+    c.sort(key=lambda m: (not any(p in m for p in prefer), "preview" in m, m), reverse=False)
+    return c
+
+
+def ffmpeg(*args):
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args], check=True)
+
+
+def font(size):
+    for p in [f"{BRAND}/font.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size)
+    return ImageFont.load_default()
+
+
+# ------------------------------------------------------------------ sheet
 def load_db():
     with open(DB, encoding="utf-8") as f:
         return json.load(f)
@@ -43,109 +101,256 @@ def load_db():
 def next_topic(db):
     done = {e["topic"].strip().lower() for e in db["episodes"]}
     text = requests.get(SHEET_CSV_URL, timeout=30).content.decode("utf-8")
-    if text.lstrip().lower().startswith("<!doctype") or "<html" in text[:500].lower():
-        raise RuntimeError("SHEET_CSV_URL returns a web page, not CSV. Publish the sheet as CSV.")
+    if "<html" in text[:500].lower():
+        raise RuntimeError("SHEET_CSV_URL returns a web page, not CSV.")
     for raw in csv.DictReader(io.StringIO(text)):
-        row = {(k or "").strip().lower(): (v or "") for k, v in raw.items()}
-        topic = row.get("topic", "").strip()
-        approved = row.get("approved", "").strip().lower()
-        if topic and approved in ("yes", "y", "oui", "1") and topic.lower() not in done:
-            return topic
-    return None
+        row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
+        topic = row.get("topic", "")
+        if topic and row.get("approved", "").lower() in ("yes", "y", "oui", "1") and topic.lower() not in done:
+            return topic, row.get("notes", "")
+    return None, ""
 
 
-def gemini_script(topic):
-    prompt = f"""You write a natural, engaging two-host podcast episode in {LANG_NAME[LANG]}.
-Host A is curious and asks questions; Host B is the expert who explains clearly.
+# ------------------------------------------------------------------ script
+def write_script(topic, notes, n):
+    words = MINUTES * 150
+    prompt = f"""You are the head writer of the podcast "{TITLE}", created and curated by {CREATOR_BIO}.
+Write episode {n} as a natural, unscripted-sounding conversation in {LANG_NAME[LANG]} between two AI hosts:
+- {HOST_A}: curious, warm, asks the questions listeners would ask, uses concrete everyday analogies.
+- {HOST_B}: sharp practitioner, explains with real industry examples (manufacturing, ports, ERP/SAP, quality, maintenance).
+
 Topic: {topic}
-Length: about 1200-1500 words of dialogue. Be accurate; if unsure of a fact, say so instead of inventing.
-No sound effects, no stage directions, no markdown.
+Rachid's own notes and angle (the core of the episode; attribute them as "Rachid's take" or "Rachid's experience"):
+{notes or "(none - build a strong practitioner angle yourself)"}
+
+Make it sound HUMAN:
+- Short turns (1-3 sentences), frequent back-and-forth, contractions, natural reactions
+  ("Right.", "Wait, really?", "Exactly.", "Hmm, that's interesting.") and occasional light humour.
+- One clear structure: hook in the first 2 lines -> why it matters -> 3 key ideas with examples -> practical takeaways.
+- Opening: {HOST_A} welcomes listeners to "{TITLE}" and says it is produced by Rachid Ait Bouale.
+- Closing: quick recap of 3 takeaways, then: "{CTA}"
+- About {words} words. Be accurate; never invent statistics, company names or quotes. If uncertain, say so.
+- No sound effects, stage directions, emojis or markdown.
+
 Return ONLY JSON:
-{{"title": "...", "description": "2-3 sentences", "cover_text": "max 5 words",
+{{"title": "catchy episode title, max 60 chars",
+  "description": "3-4 sentence show-notes summary, end with the call to action",
+  "cover_text": "2-5 punchy words for the cover",
+  "image_prompt": "one sentence describing a visual metaphor for this episode, no text in the image",
   "dialogue": [{{"speaker": "A", "text": "..."}}, {{"speaker": "B", "text": "..."}}]}}"""
     body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.8}}
-    models = [MODEL] + [m for m in ("gemini-flash-latest", "gemini-flash-lite-latest") if m != MODEL]
-    r = None
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        for attempt in range(5):
-            r = requests.post(url, headers={"x-goog-api-key": GEMINI_API_KEY,
-                              "Content-Type": "application/json"}, json=body, timeout=180)
-            if r.status_code in (429, 500, 502, 503, 504):
-                wait = 20 * (attempt + 1)
-                print(f"{model} busy ({r.status_code}), retry in {wait}s...")
-                time.sleep(wait)
-                continue
-            break
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.9}}
+    for model in [MODEL] + [m for m in ("gemini-flash-latest", "gemini-flash-lite-latest") if m != MODEL]:
+        r = gemini_post(model, body)
         if r.ok:
             print(f"Script written with {model}")
-            break
-        print(f"{model} failed ({r.status_code}), trying next model...")
+            txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(re.sub(r"^```json|```$", "", txt.strip()).strip())
+        print(f"  {model} failed ({r.status_code})")
     r.raise_for_status()
-    text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    text = re.sub(r"^```json|```$", "", text.strip()).strip()
-    return json.loads(text)
 
 
-async def tts(dialogue, out_mp3, workdir):
-    voice_a, voice_b = VOICES[LANG]
+# ------------------------------------------------------------------ voices
+def chunk_dialogue(dialogue, max_chars=2400):
+    chunks, cur, size = [], [], 0
+    for line in dialogue:
+        t = line["text"].strip()
+        if not t:
+            continue
+        if cur and size + len(t) > max_chars:
+            chunks.append(cur); cur, size = [], 0
+        cur.append(line); size += len(t)
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+def gemini_tts(dialogue, out_wav, models):
+    """Multi-speaker Gemini TTS (most human-like). Returns True on success."""
+    for model in models:
+        print(f"Trying Gemini voices with {model}")
+        pcm = bytearray()
+        ok = True
+        for i, chunk in enumerate(chunk_dialogue(dialogue)):
+            convo = "\n".join(f"{HOST_A if l['speaker'].upper()=='A' else HOST_B}: {l['text'].strip()}" for l in chunk)
+            body = {
+                "contents": [{"parts": [{"text":
+                    f"Read this podcast conversation between {HOST_A} and {HOST_B}. Relaxed, warm, "
+                    f"conversational pace, natural pauses, genuine reactions:\n{convo}"}]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {"multiSpeakerVoiceConfig": {"speakerVoiceConfigs": [
+                        {"speaker": HOST_A, "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": VOICE_A}}},
+                        {"speaker": HOST_B, "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": VOICE_B}}},
+                    ]}}}}
+            r = gemini_post(model, body, tries=4)
+            try:
+                r.raise_for_status()
+                part = r.json()["candidates"][0]["content"]["parts"][0]["inlineData"]
+                pcm += base64.b64decode(part["data"])
+                pcm += b"\x00\x00" * int(24000 * 0.4)        # 0.4 s pause between chunks
+                print(f"  chunk {i+1} ok")
+            except Exception as exc:
+                print(f"  chunk {i+1} failed: {r.status_code if r is not None else ''} {str(exc)[:150]}")
+                ok = False
+                break
+        if ok and pcm:
+            with open("/tmp/voice.pcm", "wb") as f:
+                f.write(pcm)
+            ffmpeg("-f", "s16le", "-ar", "24000", "-ac", "1", "-i", "/tmp/voice.pcm", out_wav)
+            return True
+    return False
+
+
+async def edge_tts_voice(dialogue, out_wav, workdir):
+    import edge_tts
+    va, vb = EDGE_VOICES.get(LANG, EDGE_VOICES["en"])
+    sil = os.path.join(workdir, "sil.mp3")
+    ffmpeg("-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", "0.35", "-b:a", "48k", sil)
     parts = []
     for i, line in enumerate(dialogue):
-        txt = line["text"].strip()
-        if not txt:
+        t = line["text"].strip()
+        if not t:
             continue
-        voice = voice_a if line["speaker"].upper() == "A" else voice_b
+        a = line["speaker"].upper() == "A"
         p = os.path.join(workdir, f"seg_{i:04d}.mp3")
-        await edge_tts.Communicate(txt, voice).save(p)
-        parts.append(p)
+        await edge_tts.Communicate(t, va if a else vb, rate="+4%" if a else "+0%").save(p)
+        parts += [p, sil]
     lst = os.path.join(workdir, "list.txt")
     with open(lst, "w") as f:
-        for p in parts:
-            f.write(f"file '{os.path.abspath(p)}'\n")
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-                    "-i", lst, "-ac", "1", "-b:a", "64k", out_mp3], check=True)
+        f.writelines(f"file '{os.path.abspath(p)}'\n" for p in parts)
+    ffmpeg("-f", "concat", "-safe", "0", "-i", lst, out_wav)
+
+
+def make_audio(dialogue, out_mp3, workdir):
+    voice = os.path.join(workdir, "voice.wav")
+    models = [TTS_MODEL] if TTS_MODEL else pick(list_models(), ["tts"])
+    if not (models and gemini_tts(dialogue, voice, models)):
+        print("Using edge-tts voices (fallback)")
+        asyncio.run(edge_tts_voice(dialogue, voice, workdir))
+    # optional branded intro/outro music: brand/intro.mp3, brand/outro.mp3
+    inputs = [p for p in (f"{BRAND}/intro.mp3", voice, f"{BRAND}/outro.mp3") if os.path.exists(p)]
+    args, labels = [], ""
+    for i, p in enumerate(inputs):
+        args += ["-i", p]
+        labels += f"[{i}:a]aresample=44100,aformat=channel_layouts=mono[a{i}];"
+    chain = "".join(f"[a{i}]" for i in range(len(inputs)))
+    ffmpeg(*args, "-filter_complex",
+           f"{labels}{chain}concat=n={len(inputs)}:v=0:a=1,loudnorm=I=-16:TP=-1.5:LRA=11[out]",
+           "-map", "[out]", "-ac", "1", "-b:a", "96k", out_mp3)
 
 
 def duration_seconds(mp3):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                          "-of", "csv=p=0", mp3], capture_output=True, text=True, check=True)
-    return int(float(out.stdout.strip()))
+    o = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp3],
+                       capture_output=True, text=True, check=True)
+    return int(float(o.stdout.strip()))
 
 
-def font(size):
-    for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"]:
-        if os.path.exists(path):
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default()
+# ------------------------------------------------------------------ covers
+def square(img, size=3000):
+    img = img.convert("RGB")
+    w, h = img.size
+    s = min(w, h)
+    img = img.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2))
+    return img.resize((size, size), Image.LANCZOS)
 
 
-def make_cover(text, path, subtitle=TITLE):
-    W = 3000
-    img = Image.new("RGB", (W, W))
+def ai_art(image_prompt):
+    models = pick(list_models(), ["image"], prefer=("flash",), avoid=("imagen", "tts"))
+    prompt = (f"Square podcast cover artwork. {image_prompt}. Style: {COVER_STYLE}. "
+              "Leave the lower third darker and simple. Absolutely no text, letters, numbers or logos.")
+    for model in models[:3]:
+        print(f"Trying AI cover art with {model}")
+        r = gemini_post(model, {"contents": [{"parts": [{"text": prompt}]}],
+                                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}}, tries=3)
+        try:
+            r.raise_for_status()
+            for p in r.json()["candidates"][0]["content"]["parts"]:
+                if "inlineData" in p:
+                    return Image.open(io.BytesIO(base64.b64decode(p["inlineData"]["data"])))
+        except Exception as exc:
+            print(f"  cover art failed: {str(exc)[:150]}")
+    return None
+
+
+def gradient_bg(size=3000):
+    img = Image.new("RGB", (size, size))
     d = ImageDraw.Draw(img)
-    for y in range(W):  # vertical gradient purple -> dark blue
-        t = y / W
-        d.line([(0, y), (W, y)], fill=(int(120 - 100 * t), int(40 + 10 * t), int(200 - 80 * t)))
-    d.ellipse([1900, -400, 3400, 1100], fill=(255, 120, 80))
-    # wrap title
-    f = font(260)
-    words, lines, cur = text.upper().split(), [], ""
-    for w in words:
-        test = (cur + " " + w).strip()
-        if d.textlength(test, font=f) > W - 400:
-            lines.append(cur); cur = w
-        else:
-            cur = test
-    lines.append(cur)
-    y = 1500 - len(lines) * 150
+    for y in range(size):
+        t = y / size
+        d.line([(0, y), (size, y)], fill=(int(10 + 10 * t), int(40 + 30 * t), int(80 + 30 * t)))
+    for i in range(0, size, 150):
+        d.line([(i, 0), (0, i)], fill=(30, 90, 120), width=3)
+    return img
+
+
+def wrap(d, text, max_w, start=300, min_size=150, max_lines=3):
+    size = start
+    while size >= min_size:
+        f, lines, cur = font(size), [], ""
+        for w in text.split():
+            t = (cur + " " + w).strip()
+            if d.textlength(t, font=f) > max_w and cur:
+                lines.append(cur); cur = w
+            else:
+                cur = t
+        lines.append(cur)
+        if len(lines) <= max_lines:
+            return f, lines, size
+        size -= 20
+    return f, lines, size
+
+
+def make_cover(path, headline, episode_label="", image_prompt=None):
+    S = 3000
+    base = ai_art(image_prompt) if (USE_AI_COVER and image_prompt) else None
+    if base is None and os.path.exists(f"{BRAND}/template.png"):
+        base = Image.open(f"{BRAND}/template.png")
+    img = square(base) if base is not None else gradient_bg(S)
+
+    # dark fade at the bottom for readable text
+    fade = Image.new("L", (1, S))
+    for y in range(S):
+        fade.putpixel((0, y), int(min(1, max(0, (y - S * 0.30) / (S * 0.45))) ** 0.9 * 238))
+    shade = Image.new("RGB", (S, S), (6, 14, 30))
+    img = Image.composite(shade, img, fade.resize((S, S)))
+    d = ImageDraw.Draw(img)
+
+    # show name band (top) + logo
+    x0 = 170
+    if os.path.exists(f"{BRAND}/logo.png"):
+        logo = Image.open(f"{BRAND}/logo.png").convert("RGBA")
+        logo.thumbnail((420, 420))
+        img.paste(logo, (x0, 150), logo)
+        x0 += logo.width + 50
+    d.rounded_rectangle([x0 - 30, 170, x0 + d.textlength(TITLE.upper(), font=font(130)) + 30, 350],
+                        radius=40, fill=(6, 14, 30))
+    d.text((x0, 185), TITLE.upper(), font=font(130), fill="white")
+
+    # episode label + headline
+    f, lines, size = wrap(d, headline.upper(), S - 340)
+    y = S - 330 - len(lines) * (size + 40)
+    if episode_label:
+        lf = font(110)
+        w = d.textlength(episode_label, font=lf)
+        d.rounded_rectangle([170, y - 210, 170 + w + 80, y - 50], radius=30, fill=ACCENT)
+        d.text((210, y - 195), episode_label, font=lf, fill="white")
     for ln in lines:
-        d.text((200, y), ln, font=f, fill="white"); y += 300
-    d.text((200, 2650), subtitle, font=font(130), fill=(255, 220, 200))
+        d.text((170, y), ln, font=f, fill="white", stroke_width=4, stroke_fill=(6, 14, 30))
+        y += size + 40
+    d.rectangle([170, S - 240, 620, S - 220], fill=ACCENT)
+    d.text((170, S - 190), AUTHOR, font=font(100), fill=(220, 230, 240))
     img.save(path, "PNG", optimize=True)
 
 
+def show_cover():
+    if os.path.exists(f"{BRAND}/show_cover.png"):
+        square(Image.open(f"{BRAND}/show_cover.png")).save("cover.png", "PNG", optimize=True)
+    elif not os.path.exists("cover.png"):
+        make_cover("cover.png", "Supply chain. SAP. The future of logistics.")
+
+
+# ------------------------------------------------------------------ feed
 def build_feed(db):
     items = []
     for e in reversed(db["episodes"]):
@@ -158,6 +363,7 @@ def build_feed(db):
       <pubDate>{e['pubDate']}</pubDate>
       <itunes:duration>{e['duration']}</itunes:duration>
       <itunes:image href="{BASE_URL}/{e['cover']}"/>
+      <itunes:episode>{e.get('number', '')}</itunes:episode>
       <itunes:explicit>false</itunes:explicit>
       <itunes:episodeType>full</itunes:episodeType>
     </item>""")
@@ -171,7 +377,7 @@ def build_feed(db):
     <description>{escape(DESCRIPTION)}</description>
     <itunes:author>{escape(AUTHOR)}</itunes:author>
     <itunes:owner><itunes:name>{escape(AUTHOR)}</itunes:name><itunes:email>{escape(EMAIL)}</itunes:email></itunes:owner>
-    <itunes:image href="{BASE_URL}/cover.png"/>
+    <itunes:image href="{BASE_URL}/cover.png?v={len(db['episodes'])}"/>
     <itunes:category text="{escape(CATEGORY)}"/>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
@@ -183,41 +389,38 @@ def build_feed(db):
         f.write(feed)
 
 
+# ------------------------------------------------------------------ main
 def main():
     db = load_db()
-    if not os.path.exists("cover.png"):
-        make_cover(TITLE, "cover.png", subtitle=AUTHOR)
-
-    topic = next_topic(db)
+    os.makedirs(EP_DIR, exist_ok=True)
+    show_cover()
+    topic, notes = next_topic(db)
     if not topic:
-        print("No new approved topic in the sheet. Nothing to do.")
+        print("No new approved topic. Nothing to do.")
         build_feed(db)
         return
 
-    print(f"Topic: {topic}")
-    ep = gemini_script(topic)
     n = len(db["episodes"]) + 1
     slug = f"ep{n:03d}"
+    print(f"Episode {n}: {topic}")
+    ep = write_script(topic, notes, n)
     work = f"/tmp/{slug}"; os.makedirs(work, exist_ok=True)
-
-    audio = f"{EP_DIR}/{slug}.mp3"
-    cover = f"{EP_DIR}/{slug}.png"
-    asyncio.run(tts(ep["dialogue"], audio, work))
-    make_cover(ep.get("cover_text") or ep["title"], cover)
+    audio, cover = f"{EP_DIR}/{slug}.mp3", f"{EP_DIR}/{slug}.png"
+    make_audio(ep["dialogue"], audio, work)
+    make_cover(cover, ep.get("cover_text") or ep["title"], f"EP {n:02d}", ep.get("image_prompt") or topic)
 
     db["episodes"].append({
-        "id": f"{slug}-{int(datetime.now().timestamp())}",
-        "topic": topic,
-        "title": f"{n}. {ep['title']}",
-        "description": ep["description"] + " (AI-generated episode.)",
-        "audio": audio,
-        "cover": cover,
-        "bytes": os.path.getsize(audio),
-        "duration": duration_seconds(audio),
-        "pubDate": format_datetime(datetime.now(timezone.utc)),
+        "id": f"{slug}-{int(time.time())}", "number": n, "topic": topic,
+        "title": f"Ep. {n} | {ep['title']}",
+        "description": ep["description"] + " | AI-voiced episode, created and curated by " + AUTHOR + ".",
+        "audio": audio, "cover": cover, "bytes": os.path.getsize(audio),
+        "duration": duration_seconds(audio), "pubDate": format_datetime(datetime.now(timezone.utc)),
     })
     with open(DB, "w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, indent=2)
+    with open(f"{EP_DIR}/{slug}.txt", "w", encoding="utf-8") as f:   # transcript = free blog/LinkedIn material
+        f.write(f"{ep['title']}\n\n{ep['description']}\n\n")
+        f.writelines(f"{HOST_A if l['speaker'].upper()=='A' else HOST_B}: {l['text']}\n\n" for l in ep["dialogue"])
     build_feed(db)
     print(f"Published {slug}: {ep['title']}")
 
