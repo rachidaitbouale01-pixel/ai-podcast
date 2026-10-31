@@ -3,7 +3,7 @@ Free AI podcast on autopilot.
 Topic (Google Sheet) -> Gemini script -> edge-tts audio -> cover -> RSS on GitHub Pages.
 Spotify & Apple Podcasts read the RSS feed automatically.
 """
-import asyncio, csv, io, json, os, re, subprocess, sys
+import asyncio, csv, io, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from xml.sax.saxutils import escape
@@ -22,7 +22,7 @@ AUTHOR         = os.environ.get("PODCAST_AUTHOR", "Rachid")
 EMAIL          = os.environ.get("PODCAST_EMAIL", "you@example.com")
 DESCRIPTION    = os.environ.get("PODCAST_DESCRIPTION", "An AI-generated podcast. Episodes are researched, written and voiced with AI.")
 CATEGORY       = os.environ.get("PODCAST_CATEGORY", "Technology")
-MODEL          = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL          = os.environ.get("GEMINI_MODEL") or "gemini-flash-latest"
 
 VOICES = {
     "en": ("en-US-AriaNeural", "en-US-GuyNeural"),
@@ -63,14 +63,25 @@ No sound effects, no stage directions, no markdown.
 Return ONLY JSON:
 {{"title": "...", "description": "2-3 sentences", "cover_text": "max 5 words",
   "dialogue": [{{"speaker": "A", "text": "..."}}, {{"speaker": "B", "text": "..."}}]}}"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
-    r = requests.post(
-        url,
-        headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}],
-              "generationConfig": {"responseMimeType": "application/json", "temperature": 0.8}},
-        timeout=180,
-    )
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.8}}
+    models = [MODEL] + [m for m in ("gemini-flash-latest", "gemini-flash-lite-latest") if m != MODEL]
+    r = None
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for attempt in range(5):
+            r = requests.post(url, headers={"x-goog-api-key": GEMINI_API_KEY,
+                              "Content-Type": "application/json"}, json=body, timeout=180)
+            if r.status_code in (429, 500, 502, 503, 504):
+                wait = 20 * (attempt + 1)
+                print(f"{model} busy ({r.status_code}), retry in {wait}s...")
+                time.sleep(wait)
+                continue
+            break
+        if r.ok:
+            print(f"Script written with {model}")
+            break
+        print(f"{model} failed ({r.status_code}), trying next model...")
     r.raise_for_status()
     text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
     text = re.sub(r"^```json|```$", "", text.strip()).strip()
