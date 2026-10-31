@@ -2,7 +2,7 @@ name: Publish AI podcast episode
 
 on:
   schedule:
-    - cron: "0 7 * * 1"
+    - cron: "0 6 * * 2"   # every Tuesday 06:00 UTC = 07:00 Morocco / Paris
   workflow_dispatch:
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +36,18 @@ jobs:
           PODCAST_EMAIL: ${{ vars.PODCAST_EMAIL }}
           PODCAST_DESCRIPTION: ${{ vars.PODCAST_DESCRIPTION }}
           PODCAST_CATEGORY: ${{ vars.PODCAST_CATEGORY }}
+          PODCAST_CTA: ${{ vars.PODCAST_CTA }}
+          CREATOR_BIO: ${{ vars.CREATOR_BIO }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_TTS_MODEL: ${{ vars.GEMINI_TTS_MODEL }}
+          GEMINI_VOICE_A: ${{ vars.GEMINI_VOICE_A }}
+          GEMINI_VOICE_B: ${{ vars.GEMINI_VOICE_B }}
+          HOST_A: ${{ vars.HOST_A }}
+          HOST_B: ${{ vars.HOST_B }}
+          EPISODE_MINUTES: ${{ vars.EPISODE_MINUTES }}
+          USE_AI_COVER: ${{ vars.USE_AI_COVER }}
+          COVER_STYLE: ${{ vars.COVER_STYLE }}
+          BRAND_COLOR: ${{ vars.BRAND_COLOR }}
         run: python podcast.py
 
       - name: Commit and publish
