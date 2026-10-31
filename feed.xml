@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tech &amp; Business Explained</title>
+    <link>https://rachidaitbouale01-pixel.github.io/ai-podcast</link>
+    <atom:link href="https://rachidaitbouale01-pixel.github.io/ai-podcast/feed.xml" rel="self" type="application/rss+xml"/>
+    <language>en</language>
+    <description>Short, clear episodes explaining technology, business and productivity topics. Each episode is researched, written and voiced with AI.</description>
+    <itunes:author>Rachid Ait Bouale</itunes:author>
+    <itunes:owner><itunes:name>Rachid Ait Bouale</itunes:name><itunes:email>aitboualerachid@gmail.com</itunes:email></itunes:owner>
+    <itunes:image href="https://rachidaitbouale01-pixel.github.io/ai-podcast/cover.png"/>
+    <itunes:category text="Technology"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:type>episodic</itunes:type>
+    <item>
+      <title>1. Machine Learning in 2026: Beyond the Hype</title>
+      <description>Host A and Host B break down the fundamentals of machine learning as it stands in 2026. They explore how core paradigms like supervised and reinforcement learning power modern frontier models, what has changed with reasoning and edge computing, and how newcomers can realistically start learning today. (AI-generated episode.)</description>
+      <itunes:summary>Host A and Host B break down the fundamentals of machine learning as it stands in 2026. They explore how core paradigms like supervised and reinforcement learning power modern frontier models, what has changed with reasoning and edge computing, and how newcomers can realistically start learning today. (AI-generated episode.)</itunes:summary>
+      <enclosure url="https://rachidaitbouale01-pixel.github.io/ai-podcast/episodes/ep001.mp3" length="5398893" type="audio/mpeg"/>
+      <guid isPermaLink="false">ep001-1793481747</guid>
+      <pubDate>Sat, 31 Oct 2026 21:22:27 +0000</pubDate>
+      <itunes:duration>674</itunes:duration>
+      <itunes:image href="https://rachidaitbouale01-pixel.github.io/ai-podcast/episodes/ep001.png"/>
+      <itunes:explicit>false</itunes:explicit>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+  </channel>
+</rss>

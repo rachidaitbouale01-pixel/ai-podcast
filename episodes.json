@@ -1,1 +1,15 @@
-{"episodes": []}
+{
+  "episodes": [
+    {
+      "id": "ep001-1793481747",
+      "topic": "Introduction to Machine Learning in 2026",
+      "title": "1. Machine Learning in 2026: Beyond the Hype",
+      "description": "Host A and Host B break down the fundamentals of machine learning as it stands in 2026. They explore how core paradigms like supervised and reinforcement learning power modern frontier models, what has changed with reasoning and edge computing, and how newcomers can realistically start learning today. (AI-generated episode.)",
+      "audio": "episodes/ep001.mp3",
+      "cover": "episodes/ep001.png",
+      "bytes": 5398893,
+      "duration": 674,
+      "pubDate": "Sat, 31 Oct 2026 21:22:27 +0000"
+    }
+  ]
+}
