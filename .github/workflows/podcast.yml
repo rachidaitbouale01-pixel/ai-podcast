@@ -36,6 +36,7 @@ jobs:
           PODCAST_EMAIL: ${{ vars.PODCAST_EMAIL }}
           PODCAST_DESCRIPTION: ${{ vars.PODCAST_DESCRIPTION }}
           PODCAST_CATEGORY: ${{ vars.PODCAST_CATEGORY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: python podcast.py
 
       - name: Commit and publish
