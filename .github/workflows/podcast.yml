@@ -48,6 +48,13 @@ jobs:
           USE_AI_COVER: ${{ vars.USE_AI_COVER }}
           COVER_STYLE: ${{ vars.COVER_STYLE }}
           BRAND_COLOR: ${{ vars.BRAND_COLOR }}
+          LOCK_VOICES: ${{ vars.LOCK_VOICES }}
+          LINK_LINKEDIN: ${{ vars.LINK_LINKEDIN }}
+          LINK_BEEHIIV: ${{ vars.LINK_BEEHIIV }}
+          LINK_SUBSTACK: ${{ vars.LINK_SUBSTACK }}
+          LINK_SPOTIFY: ${{ vars.LINK_SPOTIFY }}
+          LINK_APPLE: ${{ vars.LINK_APPLE }}
+          LINK_YOUTUBE: ${{ vars.LINK_YOUTUBE }}
         run: python podcast.py
 
       - name: Commit and publish
