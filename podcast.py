@@ -38,6 +38,16 @@ COVER_STYLE    = E("COVER_STYLE") or ("cinematic isometric digital illustration,
                   "chain, containers, cranes, glowing data network lines, deep navy and teal palette with "
                   "orange accents, dusk lighting, highly detailed")
 ACCENT         = E("BRAND_COLOR") or "#FF7A45"
+LINKS = [(name, (E(var) or "").strip()) for name, var in [
+    ("LinkedIn", "LINK_LINKEDIN"), ("Newsletter (beehiiv)", "LINK_BEEHIIV"), ("Substack", "LINK_SUBSTACK"),
+    ("Spotify", "LINK_SPOTIFY"), ("Apple Podcasts", "LINK_APPLE"), ("YouTube", "LINK_YOUTUBE")]]
+LINKS = [(n, u) for n, u in LINKS if u]
+
+
+def links_text():
+    if not LINKS:
+        return ""
+    return "\n\nFollow Rachid Ait Bouale:\n" + "\n".join(f"{n}: {u}" for n, u in LINKS)
 
 EDGE_VOICES = {
     "en": ("en-US-AndrewMultilingualNeural", "en-US-AvaMultilingualNeural"),
@@ -226,6 +236,8 @@ def make_audio(dialogue, out_mp3, workdir):
     voice = os.path.join(workdir, "voice.wav")
     models = [TTS_MODEL] if TTS_MODEL else pick(list_models(), ["tts"])
     if not (models and gemini_tts(dialogue, voice, models)):
+        if (E("LOCK_VOICES") or "no").lower() in ("yes", "1", "true"):
+            raise RuntimeError("Gemini voices unavailable - episode skipped to keep host voices consistent")
         print("Using edge-tts voices (fallback)")
         asyncio.run(edge_tts_voice(dialogue, voice, workdir))
     # optional branded intro/outro music: brand/intro.mp3, brand/outro.mp3
@@ -356,8 +368,8 @@ def build_feed(db):
     for e in reversed(db["episodes"]):
         items.append(f"""    <item>
       <title>{escape(e['title'])}</title>
-      <description>{escape(e['description'])}</description>
-      <itunes:summary>{escape(e['description'])}</itunes:summary>
+      <description>{escape(e['description'] + links_text())}</description>
+      <itunes:summary>{escape(e['description'] + links_text())}</itunes:summary>
       <enclosure url="{BASE_URL}/{e['audio']}" length="{e['bytes']}" type="audio/mpeg"/>
       <guid isPermaLink="false">{e['id']}</guid>
       <pubDate>{e['pubDate']}</pubDate>
@@ -374,10 +386,11 @@ def build_feed(db):
     <link>{BASE_URL}</link>
     <atom:link href="{BASE_URL}/feed.xml" rel="self" type="application/rss+xml"/>
     <language>{LANG}</language>
-    <description>{escape(DESCRIPTION)}</description>
+    <description>{escape(DESCRIPTION + links_text())}</description>
+    <itunes:summary>{escape(DESCRIPTION + links_text())}</itunes:summary>
     <itunes:author>{escape(AUTHOR)}</itunes:author>
     <itunes:owner><itunes:name>{escape(AUTHOR)}</itunes:name><itunes:email>{escape(EMAIL)}</itunes:email></itunes:owner>
-    <itunes:image href="{BASE_URL}/cover.png?v={len(db['episodes'])}"/>
+    <itunes:image href="{BASE_URL}/cover.png"/>
     <itunes:category text="{escape(CATEGORY)}"/>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
@@ -387,6 +400,47 @@ def build_feed(db):
 """
     with open("feed.xml", "w", encoding="utf-8") as f:
         f.write(feed)
+    build_site(db)
+
+
+def build_site(db):
+    """index.html: branded landing page with all links and the latest episodes."""
+    btns = "".join(f'<a class="btn" href="{escape(u)}" target="_blank" rel="noopener">{escape(n)}</a>' for n, u in LINKS)
+    btns += f'<a class="btn ghost" href="feed.xml">RSS feed</a>'
+    eps = ""
+    for e in reversed(db["episodes"][-20:]):
+        eps += f"""<article class="ep"><img src="{e['cover']}" alt="" loading="lazy">
+<div><h3>{escape(e['title'])}</h3><p>{escape(e['description'])}</p>
+<audio controls preload="none" src="{e['audio']}"></audio></div></article>"""
+    if not eps:
+        eps = "<p>First episode coming soon.</p>"
+    html = f"""<!doctype html><html lang="{LANG}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{escape(TITLE)} | {escape(AUTHOR)}</title>
+<meta name="description" content="{escape(DESCRIPTION)}">
+<meta property="og:title" content="{escape(TITLE)}"><meta property="og:image" content="{BASE_URL}/cover.png">
+<link rel="alternate" type="application/rss+xml" title="{escape(TITLE)}" href="feed.xml">
+<style>
+:root{{--bg:#06101e;--card:#0e1d33;--text:#e8eef6;--muted:#9fb0c6;--accent:{ACCENT}}}
+*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}}
+.wrap{{max-width:900px;margin:0 auto;padding:40px 20px}}
+header{{display:flex;gap:28px;align-items:center;flex-wrap:wrap}}
+header img{{width:200px;height:200px;border-radius:18px;box-shadow:0 10px 40px #0008}}
+h1{{margin:0 0 8px;font-size:2.2rem}}.sub{{color:var(--muted);margin:0 0 18px;line-height:1.5}}
+.btn{{display:inline-block;margin:4px 6px 4px 0;padding:10px 16px;border-radius:999px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600}}
+.btn.ghost{{background:transparent;border:1px solid var(--muted);color:var(--text)}}
+h2{{margin:44px 0 16px}}.ep{{display:flex;gap:18px;background:var(--card);border-radius:16px;padding:16px;margin-bottom:16px}}
+.ep img{{width:120px;height:120px;border-radius:10px;flex-shrink:0}}.ep h3{{margin:0 0 6px}}.ep p{{color:var(--muted);margin:0 0 10px;line-height:1.45}}
+audio{{width:100%}}@media(max-width:600px){{.ep{{flex-direction:column}}.ep img{{width:100%;height:auto}}}}
+footer{{color:var(--muted);font-size:.85rem;margin-top:40px}}
+</style></head><body><div class="wrap">
+<header><img src="cover.png" alt="{escape(TITLE)} cover"><div>
+<h1>{escape(TITLE)}</h1><p class="sub">{escape(DESCRIPTION)}</p>{btns}</div></header>
+<h2>Episodes</h2>{eps}
+<footer>AI-voiced episodes, created and curated by {escape(AUTHOR)}.</footer>
+</div></body></html>"""
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html)
 
 
 # ------------------------------------------------------------------ main
