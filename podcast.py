@@ -4,7 +4,7 @@ Sheet topic + your notes -> Gemini script -> human-like voices (Gemini TTS, fall
 -> branded cover (AI art or your template + real title text) -> RSS on GitHub Pages
 -> Spotify & Apple Podcasts read the RSS automatically.
 """
-import asyncio, base64, csv, io, json, os, re, subprocess, sys, time
+import asyncio, base64, csv, io, json, os, re, subprocess, sys, time, uuid
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from xml.sax.saxutils import escape
@@ -367,6 +367,8 @@ def show_cover():
 
 # ------------------------------------------------------------------ feed
 def build_feed(db):
+    feed_id = re.sub(r"^https?://", "", f"{BASE_URL}/feed.xml").rstrip("/")
+    show_guid = uuid.uuid5(uuid.UUID("ead4c236-bf58-58c6-a2c6-a6b28d128cb6"), feed_id)
     items = []
     for e in reversed(db["episodes"]):
         items.append(f"""    <item>
@@ -381,9 +383,10 @@ def build_feed(db):
       <itunes:episode>{e.get('number', '')}</itunes:episode>
       <itunes:explicit>false</itunes:explicit>
       <itunes:episodeType>full</itunes:episodeType>
+      <link>{BASE_URL}/</link>{transcript_tag(e)}
     </item>""")
     feed = f"""<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:podcast="https://podcastindex.org/namespace/1.0">
   <channel>
     <title>{escape(TITLE)}</title>
     <link>{BASE_URL}</link>
@@ -397,6 +400,8 @@ def build_feed(db):
     <itunes:category text="{escape(CATEGORY)}"/>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
+    <podcast:locked owner="{escape(EMAIL)}">yes</podcast:locked>
+    <podcast:guid>{show_guid}</podcast:guid>
 {chr(10).join(items)}
   </channel>
 </rss>
@@ -404,6 +409,13 @@ def build_feed(db):
     with open("feed.xml", "w", encoding="utf-8") as f:
         f.write(feed)
     build_site(db)
+
+
+def transcript_tag(e):
+    t = e["audio"].replace(".mp3", ".txt")
+    if os.path.exists(t):
+        return f'\n      <podcast:transcript url="{BASE_URL}/{t}" type="text/plain"/>'
+    return ""
 
 
 def build_site(db):
