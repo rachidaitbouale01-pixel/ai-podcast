@@ -335,9 +335,12 @@ def make_cover(path, headline, episode_label="", image_prompt=None):
         logo.thumbnail((420, 420))
         img.paste(logo, (x0, 150), logo)
         x0 += logo.width + 50
-    d.rounded_rectangle([x0 - 30, 170, x0 + d.textlength(TITLE.upper(), font=font(130)) + 30, 350],
+    tsize = 130
+    while tsize > 60 and d.textlength(TITLE.upper(), font=font(tsize)) > S - x0 - 200:
+        tsize -= 5
+    d.rounded_rectangle([x0 - 30, 170, x0 + d.textlength(TITLE.upper(), font=font(tsize)) + 30, 170 + tsize + 50],
                         radius=40, fill=(6, 14, 30))
-    d.text((x0, 185), TITLE.upper(), font=font(130), fill="white")
+    d.text((x0, 185), TITLE.upper(), font=font(tsize), fill="white")
 
     # episode label + headline
     f, lines, size = wrap(d, headline.upper(), S - 340)
