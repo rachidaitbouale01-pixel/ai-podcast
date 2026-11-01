@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Logistics Tomorrow</title>
+    <link>https://rachidaitbouale01-pixel.github.io/ai-podcast</link>
+    <atom:link href="https://rachidaitbouale01-pixel.github.io/ai-podcast/feed.xml" rel="self" type="application/rss+xml"/>
+    <language>en</language>
+    <description>Short, clear episodes explaining technology, business and productivity topics. Each episode is researched, written and voiced with AI.
+
+Follow Rachid Ait Bouale:
+LinkedIn: https://www.linkedin.com/in/rachid-ait-bouale-587633242/
+Newsletter (beehiiv): https://logisticstomorrow.beehiiv.com/?_gl=1*19woatz*_gcl_au*ODg5NTE1MjY0LjE3OTI4NDk4MDUuMTk5MTc0MjgxNC4xNzkzNDQ5OTk3LjE3OTM1MjgxMTkuNTg2NTUyMzg2LjE3OTM0NDk5OTcuMTc5MzUyODExOQ..*_ga*MTY5OTE1ODg5Ni4xNzc2OTYwMTQy*_ga_E6Y4WLQ2EC*czE3OTM1MjU3OTEkbzUxJGcxJHQxNzkzNTI4MTE5JGo1NCRsMCRoNTUyODQ3MjM3
+Substack: https://logisticstomorrow.substack.com/</description>
+    <itunes:summary>Short, clear episodes explaining technology, business and productivity topics. Each episode is researched, written and voiced with AI.
+
+Follow Rachid Ait Bouale:
+LinkedIn: https://www.linkedin.com/in/rachid-ait-bouale-587633242/
+Newsletter (beehiiv): https://logisticstomorrow.beehiiv.com/?_gl=1*19woatz*_gcl_au*ODg5NTE1MjY0LjE3OTI4NDk4MDUuMTk5MTc0MjgxNC4xNzkzNDQ5OTk3LjE3OTM1MjgxMTkuNTg2NTUyMzg2LjE3OTM0NDk5OTcuMTc5MzUyODExOQ..*_ga*MTY5OTE1ODg5Ni4xNzc2OTYwMTQy*_ga_E6Y4WLQ2EC*czE3OTM1MjU3OTEkbzUxJGcxJHQxNzkzNTI4MTE5JGo1NCRsMCRoNTUyODQ3MjM3
+Substack: https://logisticstomorrow.substack.com/</itunes:summary>
+    <itunes:author>Rachid Ait Bouale</itunes:author>
+    <itunes:owner><itunes:name>Rachid Ait Bouale</itunes:name><itunes:email>aitboualerachid@gmail.com</itunes:email></itunes:owner>
+    <itunes:image href="https://rachidaitbouale01-pixel.github.io/ai-podcast/cover.png"/>
+    <itunes:category text="Business"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:type>episodic</itunes:type>
+    <item>
+      <title>Ep. 1 | Why Production Plans Fail Before the Shop Floor</title>
+      <description>Ever wonder why a production schedule looks completely green in SAP, yet the assembly line halts by mid-morning? In this premiere episode of Logistics Tomorrow, Alex and Sara unpack how corrupted master data tricks Material Requirements Planning into confident failure. Learn the operational warning signs and Rachid Ait Bouale's field-tested method for auditing MRP views and establishing data ownership. Got a story about this from your own plant or warehouse? Message Rachid Ait Bouale on LinkedIn. | AI-voiced episode, created and curated by Rachid Ait Bouale.
+
+Follow Rachid Ait Bouale:
+LinkedIn: https://www.linkedin.com/in/rachid-ait-bouale-587633242/
+Newsletter (beehiiv): https://logisticstomorrow.beehiiv.com/?_gl=1*19woatz*_gcl_au*ODg5NTE1MjY0LjE3OTI4NDk4MDUuMTk5MTc0MjgxNC4xNzkzNDQ5OTk3LjE3OTM1MjgxMTkuNTg2NTUyMzg2LjE3OTM0NDk5OTcuMTc5MzUyODExOQ..*_ga*MTY5OTE1ODg5Ni4xNzc2OTYwMTQy*_ga_E6Y4WLQ2EC*czE3OTM1MjU3OTEkbzUxJGcxJHQxNzkzNTI4MTE5JGo1NCRsMCRoNTUyODQ3MjM3
+Substack: https://logisticstomorrow.substack.com/</description>
+      <itunes:summary>Ever wonder why a production schedule looks completely green in SAP, yet the assembly line halts by mid-morning? In this premiere episode of Logistics Tomorrow, Alex and Sara unpack how corrupted master data tricks Material Requirements Planning into confident failure. Learn the operational warning signs and Rachid Ait Bouale's field-tested method for auditing MRP views and establishing data ownership. Got a story about this from your own plant or warehouse? Message Rachid Ait Bouale on LinkedIn. | AI-voiced episode, created and curated by Rachid Ait Bouale.
+
+Follow Rachid Ait Bouale:
+LinkedIn: https://www.linkedin.com/in/rachid-ait-bouale-587633242/
+Newsletter (beehiiv): https://logisticstomorrow.beehiiv.com/?_gl=1*19woatz*_gcl_au*ODg5NTE1MjY0LjE3OTI4NDk4MDUuMTk5MTc0MjgxNC4xNzkzNDQ5OTk3LjE3OTM1MjgxMTkuNTg2NTUyMzg2LjE3OTM0NDk5OTcuMTc5MzUyODExOQ..*_ga*MTY5OTE1ODg5Ni4xNzc2OTYwMTQy*_ga_E6Y4WLQ2EC*czE3OTM1MjU3OTEkbzUxJGcxJHQxNzkzNTI4MTE5JGo1NCRsMCRoNTUyODQ3MjM3
+Substack: https://logisticstomorrow.substack.com/</itunes:summary>
+      <enclosure url="https://rachidaitbouale01-pixel.github.io/ai-podcast/episodes/ep001.mp3" length="8394381" type="audio/mpeg"/>
+      <guid isPermaLink="false">ep001-1793529568</guid>
+      <pubDate>Sun, 01 Nov 2026 10:39:28 +0000</pubDate>
+      <itunes:duration>699</itunes:duration>
+      <itunes:image href="https://rachidaitbouale01-pixel.github.io/ai-podcast/episodes/ep001.png"/>
+      <itunes:episode>1</itunes:episode>
+      <itunes:explicit>false</itunes:explicit>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>
+  </channel>
+</rss>
