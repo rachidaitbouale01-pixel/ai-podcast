@@ -2,16 +2,25 @@ name: Publish AI podcast episode
 
 on:
   schedule:
-    - cron: "0 6 * * 2"   # every Tuesday 06:00 UTC = 07:00 Morocco / Paris
+    - cron: "0 6 * * 2"   # every Tuesday 06:00 UTC = 07:00 Morocco
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: podcast
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +71,21 @@ jobs:
           git config user.name "podcast-bot"
           git config user.email "podcast-bot@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet && echo "Nothing new" && exit 0
-          git commit -m "New episode $(date -u +%Y-%m-%d)"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nothing new"
+          else
+            git commit -m "New episode $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Prepare website
+        uses: actions/configure-pages@v5
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4
